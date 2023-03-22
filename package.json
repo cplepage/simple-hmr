@@ -1,0 +1,12 @@
+{
+    "name": "fullstacked-hmr",
+    "version": "0.0.0",
+    "main": "watcher.mjs",
+    "scripts": {
+        "start": "node ."
+    },
+    "author": "CP Lepage",
+    "dependencies": {
+        "ws": "^8.13.0"
+    }
+}
