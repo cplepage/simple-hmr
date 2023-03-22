@@ -21,6 +21,6 @@ server.on('upgrade', (request, socket, head) => {
   });
 });
 
-const watcher = fs.promises.watch("./module.js");
-for await (const event of watcher)
-  activeWS.forEach(ws => ws.send(event.filename));
+fs.watch("./module.js", (_, file) => {
+  activeWS.forEach(ws => ws.send(file));
+});
