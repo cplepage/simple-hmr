@@ -9,7 +9,7 @@ subscriptions.set("client/render.js", async () => {
 const script = async () => {
   document.querySelector("#root").innerHTML = `
 
-    <div>Edit <code>module.js</code> to live updates this title</div>
+    <div>Edit <code>module.js</code> to live updates this title.</div>
 
     <div>
       <b>Client Side Render</b><br />
