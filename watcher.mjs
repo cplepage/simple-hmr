@@ -1,9 +1,11 @@
 import { WebSocketServer } from "ws";
 import fs from "fs";
-import { glob } from "glob";
-import WatcherSubscription from "./watchSubscription.mjs";
+import builder from "./builder.mjs";
 
 const wss = new WebSocketServer({ noServer: true });
+
+const entrypoint = "./client/index.js";
+const initialTree = await builder(entrypoint);
 
 const activeWS = new Set();
 wss.on('connection', (ws) => {
@@ -13,6 +15,15 @@ wss.on('connection', (ws) => {
     console.log("Lost Web Socket Connection");
     activeWS.delete(ws);
   });
+
+  ws.send(JSON.stringify({
+    type: "setup",
+    data: {
+      tree: initialTree,
+      entrypoint,
+      basePath: "./client"
+    }
+  }));
 });
 
 const { server } = await import("./server/index.mjs");
@@ -23,11 +34,12 @@ server.on('upgrade', (request, socket, head) => {
   });
 });
 
-const filesToWatch = await glob('./**/*.{js,mjs}', { ignore: ["**/node_modules/**"] });
-filesToWatch.forEach(filename => {
-  fs.watch(filename, () => {
-    const cb = WatcherSubscription.get(filename);
-    if (cb) cb();
-    activeWS.forEach(ws => ws.send(filename));
+Object.keys(initialTree).forEach(modulePath => {
+  fs.watch(modulePath, async () => {
+    await builder(modulePath);
+    activeWS.forEach(ws => ws.send(JSON.stringify({
+      type: "module",
+      data: modulePath
+    })));
   });
 });

@@ -1,21 +1,12 @@
 import http from "http";
 import fs from "fs";
-import WatcherSubscription from "../watchSubscription.mjs"
 
 export const server = http.createServer(async (req, res) => {
-  let endpoints = (await import("./endpoints.mjs?" + Date.now())).default;
-  WatcherSubscription.set("endpoints.mjs", async () => {
-    endpoints = (await import("./endpoints.mjs?" + Date.now())).default;
-  });
-
-  if (endpoints(req, res))
-    return;
-
   const path = req.url.split("?").shift();
 
-  const file = "./client" + (path === "/"
-    ? "/index.html"
-    : path);
+  const file = path === "/"
+    ? "./client/index.html"
+    : "./dist/client/" + path;
 
   if (!fs.existsSync(file)) {
     res.writeHead(404);

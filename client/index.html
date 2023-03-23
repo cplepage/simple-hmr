@@ -12,4 +12,34 @@
     </style>
     <div id="root"></div>
 </body>
-<script type="module" src="/index.js"></script>
+<script>
+    const ws = new WebSocket("ws://" + window.location.host);
+    const subscriptions = new Map();
+
+    let tree, basePath;
+
+    window.getModuleImportPath = (modulePath) => {
+        return modulePath.replace(basePath, ".") + (tree[modulePath].id
+            ? "?t=" + tree[modulePath].id
+            : "");
+    }
+
+    function crawlToRoot(modulePath, id) {
+        tree[modulePath].id = id;
+        return tree[modulePath].parents ? crawlToRoot(tree[modulePath].parents.at(0), id) : modulePath;
+    }
+
+    ws.onmessage = async (message) => {
+        const {type, data} = JSON.parse(message.data);
+
+        if (type === "setup") {
+            tree = data.tree;
+            basePath = data.basePath;
+            await import(window.getModuleImportPath(data.entrypoint));
+        } else if (type === "module") {
+            const id = Date.now();
+            const rootModule = crawlToRoot(data, id);
+            await import(window.getModuleImportPath(rootModule));
+        }
+    };
+</script>
