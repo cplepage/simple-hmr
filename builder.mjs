@@ -42,7 +42,7 @@ async function recursiveBuilder(entrypoint, flatTree = {}, externalModules = [])
           let content = fs.readFileSync(path).toString();
 
 
-          const imports = content.match(/import(.|\t|\n|\r)*?".*";?/g);
+          const imports = content.match(/import(.|\t|\n|\r)*?(".*"|'.*');?/g);
           if (imports) {
             await Promise.all(imports.map((importStatement, index) => {
               const modulePathRelativeToCurrent = importStatement.match(/".*"/).at(0).slice(1, -1).trim();
