@@ -4,8 +4,12 @@ import builder from "./builder.mjs";
 
 const wss = new WebSocketServer({ noServer: true });
 
-const entrypoint = "./client/index.js";
-const initialTree = await builder(entrypoint);
+try {
+  await fs.promises.rm("dist", { recursive: true });
+} catch (e) { }
+
+const entrypoint = "./client/index.jsx";
+const initialTree = await builder(entrypoint, true);
 
 const activeWS = new Set();
 wss.on('connection', (ws) => {

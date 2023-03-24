@@ -19,9 +19,10 @@
     let tree, basePath;
 
     window.getModuleImportPath = (modulePath) => {
-        return modulePath.replace(basePath, ".") + (tree[modulePath].id
-            ? "?t=" + tree[modulePath].id
-            : "");
+        const fixedModulePath = tree[modulePath].jsx ? modulePath.slice(0, -1) : modulePath;
+
+        return fixedModulePath.replace(basePath, ".") +
+            (tree[modulePath].id ? "?t=" + tree[modulePath].id : "");
     }
 
     function crawlToRoot(modulePath, id) {
