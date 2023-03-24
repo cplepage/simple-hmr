@@ -45,7 +45,7 @@ async function recursiveBuilder(entrypoint, flatTree = {}, externalModules = [])
           const imports = content.match(/import(.|\t|\n|\r)*?(".*"|'.*');?/g);
           if (imports) {
             await Promise.all(imports.map((importStatement, index) => {
-              const modulePathRelativeToCurrent = importStatement.match(/".*"/).at(0).slice(1, -1).trim();
+              const modulePathRelativeToCurrent = importStatement.match(/(".*"|'.*')/).at(0).slice(1, -1).trim();
 
               // node_modules
               if (!modulePathRelativeToCurrent.startsWith(".")) {
