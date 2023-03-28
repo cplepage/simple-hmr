@@ -1,15 +1,16 @@
 {
     "name": "fullstacked-hmr",
     "version": "0.0.0",
-    "main": "watcher.mjs",
-    "scripts": {
-        "start": "node ."
-    },
     "author": "CP Lepage",
+    "scripts": {
+        "test": "mocha"
+    },
     "dependencies": {
         "esbuild": "^0.17.12",
-        "react": "^18.2.0",
-        "react-dom": "^18.2.0",
         "ws": "^8.13.0"
+    },
+    "type": "module",
+    "devDependencies": {
+        "mocha": "^10.2.0"
     }
 }
