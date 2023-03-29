@@ -1,24 +1,12 @@
-import { parseArgs } from 'util';
 import watcher from './watcher/index.js';
 import { getModulePathExtension } from './watcher/builder.js';
 import fs from "fs";
 
-let {
-  values: {
-    clientEntrypoint,
-    serverEntrypoint
-  }
-} = parseArgs({
-  options: {
-    clientEntrypoint: {
-      type: 'string',
-      short: 'c',
-    },
-    serverEntrypoint: {
-      type: 'string',
-      short: 's'
-    },
-  }
+let clientEntrypoint, serverEntrypoint;
+
+process.argv.forEach((arg, index) => {
+  if (arg === '-c') clientEntrypoint = process.argv[index + 1];
+  if (arg === '-s') serverEntrypoint = process.argv[index + 1];
 });
 
 

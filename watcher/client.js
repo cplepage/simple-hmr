@@ -1,4 +1,6 @@
-const ws = new WebSocket("ws://" + window.location.host);
+const ws = new WebSocket("ws" +
+  (window.location.protocol === "https:" ? "s" : "") +
+  "://" + window.location.host);
 
 let tree, basePath;
 
@@ -16,7 +18,9 @@ function getModuleImportPath(modulePath) {
 
 function crawlToRoot(modulePath, id) {
   tree[modulePath].id = id;
-  return tree[modulePath].parents ? tree[modulePath].parents.map(parent => crawlToRoot(parent, id)) : [modulePath];
+  return tree[modulePath].parents
+    ? tree[modulePath].parents.map(parent => crawlToRoot(parent, id))
+    : [modulePath];
 }
 
 function updateModule(modulePath) {
