@@ -1,3 +1,4 @@
+
 export default function() {
-  return `<h1>SSR 2</h1>`;
+  return `<h1>Wow nice</h1>`;
 }

@@ -273,7 +273,7 @@ export function convertImportDefinitionToAsyncImport(moduleName, importDefinitio
   if (typeof moduleName !== "string") return null;
 
   let importString = moduleResolverWrapperFunction
-    ? `await import(${moduleResolverWrapperFunction}("${moduleName}"));`
+    ? `await import(${moduleResolverWrapperFunction}("${moduleName}", import.meta.url));`
     : `await import("${moduleName}");`;
 
   if (!(importDefinition?.defaultImports || importDefinition?.namespaceImports || importDefinition?.namedImports))

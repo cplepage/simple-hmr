@@ -2,19 +2,27 @@ const ws = new WebSocket("ws://" + window.location.host);
 
 let tree, basePath;
 
-window.getModuleImportPath = (modulePath) => {
-  return modulePath.replace(basePath, "") + (tree && tree[modulePath].id ? "?t=" + tree[modulePath].id : "");
+function getModuleImportPath(modulePath) {
+  if(!tree) tree = {};
+
+  if(!tree[modulePath])
+    tree[modulePath] = {}
+
+  if(!tree[modulePath].id)
+    tree[modulePath].id = 0;
+
+  return modulePath.replace(basePath, "") + "?t=" + tree[modulePath].id;
 }
 
 function crawlToRoot(modulePath, id) {
   tree[modulePath].id = id;
-  return tree[modulePath].parents ? crawlToRoot(tree[modulePath].parents.at(0), id) : modulePath;
+  return tree[modulePath].parents ? tree[modulePath].parents.map(parent => crawlToRoot(parent, id)) : [modulePath];
 }
 
 function updateModule(modulePath) {
   const id = Date.now();
-  const rootModule = crawlToRoot(modulePath, id);
-  return import(window.getModuleImportPath(rootModule));
+  const rootModules = Array.from(new Set(crawlToRoot(modulePath, id).flat(Infinity)));
+  return Promise.all(rootModules.map(rootModule => import(getModuleImportPath(rootModule))));
 }
 
 function removeError() {
@@ -37,10 +45,22 @@ function displayError(errorData) {
       background-color: rgba(255, 255, 255, 0.8);
     `;
   }
-  errorContainer.innerText = errorData.map(error => error.notes.map(errorNote =>
-    `Error in file [${errorNote.location.file}:${errorNote.location.line}]
-    > ${errorNote.location.lineText}
-  `).join("\n") + `\n${error.text}`).join("\n");
+  errorContainer.innerText = errorData.map(error => `Error in file [${error.location.file}:${error.location.line}]\n` +
+    error.notes.map(errorNote =>`> ${errorNote.location.lineText}`).join("\n") +
+    `\n${error.text}`).join("\n");
+}
+
+function sleep(ms) {
+  return new Promise(res => setTimeout(res), ms);
+}
+
+async function waitForServer() {
+  try {
+    await fetch(window.location.href);
+  } catch (e) {
+    await sleep(100);
+    return waitForServer();
+  }
 }
 
 ws.onmessage = async (message) => {
@@ -59,6 +79,8 @@ ws.onmessage = async (message) => {
       displayError(data);
       break;
     case "server":
-
+      await sleep(100);
+      await waitForServer();
+      window.location.reload();
   }
 };

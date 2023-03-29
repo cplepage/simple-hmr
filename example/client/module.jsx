@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Button from "./component/button";
 
 export default function() {
   const [message, setMessage] = useState();
@@ -10,9 +11,10 @@ export default function() {
   }, [])
 
   return <div>
-    Fetching from server :<br />
+    Fetching from server nice :<br />
     <br />
-    <b>{message}</b>
+    <b>{message}</b><br />
+    <Button label="module"  />
 
   </div>
 }

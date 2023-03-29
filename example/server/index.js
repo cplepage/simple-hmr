@@ -4,7 +4,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { hello } from "./endpoints";
 import SSR from "./ssr";
-import HTML from "./baseHTML";
+import HTML from "./html";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -41,5 +41,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(3000);
+
+console.log("Listening at http://localhost:3000");
 
 export default server;

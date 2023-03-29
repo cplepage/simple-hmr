@@ -1,4 +1,4 @@
-import Builder from "../builder.js";
+import Builder from "./builder.js";
 import { dirname, resolve } from "path";
 import { WebSocketServer } from "ws";
 import fs from "fs"
@@ -11,7 +11,7 @@ export default async function(clientEntrypoint, serverEntrypoint) {
     entrypoint: clientEntrypoint,
     recurse: true,
     useModuleProjectPaths: true,
-    moduleResolverWrapperFunction: "window.getModuleImportPath",
+    moduleResolverWrapperFunction: "getModuleImportPath",
     externalModules: {
       convert: true,
       bundle: true,
@@ -23,33 +23,72 @@ export default async function(clientEntrypoint, serverEntrypoint) {
   const serverModuleTree = await Builder({
     entrypoint: serverEntrypoint,
     recurse: true,
+    moduleResolverWrapperFunction: "getModuleImportPath",
     externalModules: {
       convert: false,
     }
   });
 
-  const server = (await import(resolve("./dist", serverEntrypoint))).default;
 
-  server.prependListener('request', (_, res) => {
-    const originalEnd = res.end.bind(res);
-    res.end = function(chunk, encoding, callback) {
+  global.getModuleImportPath = (modulePath, currentModulePath) => {
+    const fixedModulePath = resolve(dirname((new URL(currentModulePath)).pathname), modulePath)
+      .replace(process.cwd(), ".")
+      .replace("/dist", "");
+    return modulePath + (serverModuleTree && serverModuleTree[fixedModulePath].id ? "?t=" + serverModuleTree[fixedModulePath].id : "")
+  };
 
-      const mimeType = res.getHeader("Content-Type");
+  let server, activeSockets = new Set();
+  const loadServer = async () => {
+    server = (await import(resolve("./dist", serverEntrypoint) + `?t=${Date.now()}`)).default;
 
-      if (mimeType === "text/html") {
-        res.write(`<script>${clientWatcherScript}</script>`);
+    server.prependListener('request', (_, res) => {
+      const originalEnd = res.end.bind(res);
+      res.end = function(chunk, encoding, callback) {
+
+        const mimeType = res.getHeader("Content-Type");
+
+        if (mimeType === "text/html") {
+          res.write(`<script>${clientWatcherScript}</script>`);
+        }
+
+        originalEnd(chunk, encoding, callback);
       }
-
-      originalEnd(chunk, encoding, callback);
-    }
-  });
-
-  server.on('upgrade', (request, socket, head) => {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
     });
-  });
 
+    server.on('upgrade', (request, socket, head) => {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    });
+
+    server.on('connection', function(socket) {
+      activeSockets.add(socket)
+
+      socket.on('close', function() {
+        activeSockets.delete(socket)
+      });
+    });
+
+  }
+
+  let reloading = false;
+  const reloadServer = () => {
+    if (reloading) return
+    reloading = true;
+    if (server) {
+      console.log("Reloading server");
+      activeSockets.forEach(socket => socket.destroy());
+      server.close(() => {
+        loadServer()
+        reloading = false;
+      });
+    } else {
+      reloading = false;
+      loadServer();
+    }
+  }
+
+  reloadServer();
 
   const wss = new WebSocketServer({ noServer: true });
   const activeWS = new Set();
@@ -82,7 +121,7 @@ export default async function(clientEntrypoint, serverEntrypoint) {
           entrypoint: modulePath,
           recurse: false,
           useModuleProjectPaths: true,
-          moduleResolverWrapperFunction: "window.getModuleImportPath",
+          moduleResolverWrapperFunction: "getModuleImportPath",
           externalModules: {
             convert: true,
             bundle: false
@@ -105,17 +144,48 @@ export default async function(clientEntrypoint, serverEntrypoint) {
     });
   });
 
+  function crawlToRoot(modulePath, id) {
+    serverModuleTree[modulePath].id = id;
+    return serverModuleTree[modulePath].parents
+      ? serverModuleTree[modulePath].parents.map(parent => crawlToRoot(parent, id))
+      : [modulePath];
+  }
+
+  function updateModule(modulePath) {
+    const id = Date.now();
+    crawlToRoot(modulePath, id);
+  }
 
   Object.keys(serverModuleTree).forEach(modulePath => {
     const isJSX = serverModuleTree[modulePath].jsx;
     modulePath = isJSX ? modulePath + "x" : modulePath
     fs.watch(modulePath, async () => {
 
+      try {
+        await Builder({
+          entrypoint: modulePath,
+          recurse: false,
+          moduleResolverWrapperFunction: "getModuleImportPath",
+          externalModules: {
+            convert: false,
+          }
+        });
+      } catch (e) {
+        activeWS.forEach(ws => ws.send(JSON.stringify({
+          type: "error",
+          data: e.errors
+        })));
+        return;
+      }
+
+      updateModule(modulePath);
+
       activeWS.forEach(ws => ws.send(JSON.stringify({
         type: "server",
         data: modulePath
       })));
 
+      reloadServer();
     });
   });
 

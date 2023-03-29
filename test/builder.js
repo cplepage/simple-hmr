@@ -1,6 +1,6 @@
 import assert from "assert";
 import fs from "fs";
-import Build, { builder } from "../builder.js";
+import Build, { builder } from "../watcher/builder.js";
 import { dirname } from "path";
 import { execSync } from "child_process";
 

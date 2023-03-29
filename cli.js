@@ -1,6 +1,6 @@
 import { parseArgs } from 'util';
 import watcher from './watcher/index.js';
-import { getModulePathExtension } from './builder.js';
+import { getModulePathExtension } from './watcher/builder.js';
 import fs from "fs";
 
 let {
