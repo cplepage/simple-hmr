@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Button from "./component/button";
+import Box from "./component/box";
 
 export default function() {
-  const [message, setMessage] = useState();
+  const [message, setMessage] = useState("Loading...");
 
   useEffect(() => {
     fetch("/hello")
@@ -11,10 +12,17 @@ export default function() {
   }, [])
 
   return <div>
-    Fetching from server nice :<br />
-    <br />
-    <b>{message}</b><br />
-    <Button label="module"  />
+    <label>
+    This is fetched from the server :
+    </label>
+
+    <Box>
+      <b>{message}</b>
+    </Box>
+
+    <p>Edit <code>./example/server/endpoint.js</code> and see the change happen live!</p>
+
+    <Button label="Button"  />
 
   </div>
 }

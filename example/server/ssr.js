@@ -1,4 +1,11 @@
 
 export default function() {
-  return `<h1>Wow nice</h1>`;
+  return `
+  <meta charset="utf-8">
+  <style>*{font-family: sans-serif}</style>
+  <h1>Hot Reload SSR page</h1>
+  <p>This page is fully server side rendered</p>
+  <p>Server side chagnes only hot reload the page (for now 😉)
+  <p>Edit <code>./example/server/ssr.js</code> and see the page Hot Reload!</p>
+  <a href="/">Go back to SPA like home page</a>`;
 }
