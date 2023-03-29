@@ -2,6 +2,7 @@ import React from "react";
 
 export default function ({label, onClick}) {
   return <button style={{
+    // Edit the styles here!!!
     backgroundColor: "blue",
     color: "white",
     border: 0,
