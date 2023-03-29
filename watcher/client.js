@@ -59,8 +59,9 @@ function sleep(ms) {
 }
 
 async function waitForServer() {
+  const signal = AbortSignal.timeout(500);
   try {
-    await fetch(window.location.href);
+    await fetch(window.location.href, {signal});
   } catch (e) {
     await sleep(100);
     return waitForServer();
