@@ -35,7 +35,7 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Content-Type", file.endsWith(".css") ? "text/css" : "text/javascript");
   res.writeHead(200);
   res.end(fs.readFileSync(file));
 });

@@ -2,7 +2,7 @@
 export default function() {
   return `
   <meta charset="utf-8">
-  <style>*{font-family: sans-serif}</style>
+  <link rel="stylesheet" href="/index.css">
   <h1>Hot Reload SSR page</h1>
   <p>This page is fully server side rendered</p>
   <p>Server side chagnes only hot reload the page (for now 😉)

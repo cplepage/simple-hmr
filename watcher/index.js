@@ -1,4 +1,4 @@
-import Builder from "./builder.js";
+import Builder, { bundleCSSFiles } from "./builder.js";
 import { dirname, resolve } from "path";
 import { WebSocketServer } from "ws";
 import fs from "fs"
@@ -7,7 +7,7 @@ const clientWatcherScript = fs.readFileSync("./watcher/client.js");
 
 export default async function(clientEntrypoint, serverEntrypoint) {
   const clientBaseDir = dirname(clientEntrypoint);
-  const clientModuleTree = await Builder({
+  const clientBuild = await Builder({
     entrypoint: clientEntrypoint,
     recurse: true,
     useModuleProjectPaths: true,
@@ -18,9 +18,10 @@ export default async function(clientEntrypoint, serverEntrypoint) {
       bundleOutdir: resolve("dist", clientBaseDir)
     }
   });
+  const clientModuleTree = clientBuild.modulesFlatTree;
 
 
-  const serverModuleTree = await Builder({
+  const serverBuild = await Builder({
     entrypoint: serverEntrypoint,
     recurse: true,
     moduleResolverWrapperFunction: "getModuleImportPath",
@@ -28,6 +29,7 @@ export default async function(clientEntrypoint, serverEntrypoint) {
       convert: false,
     }
   });
+  const serverModuleTree = serverBuild.modulesFlatTree;
 
 
   global.getModuleImportPath = (modulePath, currentModulePath) => {
@@ -114,9 +116,20 @@ export default async function(clientEntrypoint, serverEntrypoint) {
 
 
   Object.keys(clientModuleTree).forEach(modulePath => {
+    const isCSS = clientModuleTree[modulePath].css;
     const isJSX = clientModuleTree[modulePath].jsx;
     modulePath = isJSX ? modulePath + "x" : modulePath
     fs.watch(modulePath, async () => {
+      if (isCSS) {
+        await bundleCSSFiles(clientBuild.cssFiles, resolve("dist", clientBaseDir), "index.css");
+
+        activeWS.forEach(ws => ws.send(JSON.stringify({
+          type: "css",
+          data: "index.css"
+        })));
+
+        return;
+      }
 
       try {
         await Builder({

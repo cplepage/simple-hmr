@@ -7,8 +7,10 @@ import {
 } from "../importsParser.js";
 
 export function getModulePathExtension(modulePath) {
-  return ["", "x", ".js", ".jsx", ".ts", ".tsx", "/index.js", "/index.jsx", "/index.ts", "/index.tsx"]
-    .find(ext => fs.existsSync(modulePath + ext) && fs.statSync(modulePath + ext).isFile());
+  return ["",
+    "x", ".js", ".jsx", ".mjs", ".ts", ".tsx",
+    "/index.js", "/index.jsx", "./index.mjs", "/index.ts", "/index.tsx"
+  ].find(ext => fs.existsSync(modulePath + ext) && fs.statSync(modulePath + ext).isFile());
 }
 
 export async function builder({
@@ -19,7 +21,7 @@ export async function builder({
   convertExternalModules,
   bundleName,
   moduleResolverWrapperFunction
-}, modulesFlatTree = {}, externalModules = []) {
+}, modulesFlatTree = {}, externalModules = [], cssFiles = []) {
   entrypoint = entrypoint + getModulePathExtension(entrypoint);
 
   const currentDir = dirname(entrypoint);
@@ -37,6 +39,7 @@ export async function builder({
     outdir: resolve(process.cwd(), outdir, currentDir),
     format: "esm",
     allowOverwrite: true,
+    assetNames: '[name]',
     plugins: [{
       name: "recursive-builder",
       setup(build) {
@@ -44,7 +47,10 @@ export async function builder({
         build.onLoad({ filter: /.*/ }, async ({ path }) => {
           const contents = fs.readFileSync(path).toString();
 
-          const { statements, lines } = tokenizeImports(contents);
+          const importStatements = tokenizeImports(contents);
+
+          const statements = importStatements?.statements ?? [];
+          const lines = importStatements?.lines ?? [undefined, undefined];
 
           const asyncImports = [];
           let importsDefinitions = statements.map(statement => analyzeRawImportStatement(statement));
@@ -64,14 +70,20 @@ export async function builder({
           for (let i = 0; i < entries.length; i++) {
             let [moduleName, importDefinition] = entries[i];
 
-            if (!moduleName.startsWith(".") && convertExternalModules) {
+            // node_modules
+            if (!moduleName.startsWith(".")) {
 
-              if (!externalModules.includes(moduleName))
-                externalModules.push(moduleName)
+              if (convertExternalModules) {
 
-              const indexOfExternalModule = externalModules.indexOf(moduleName);
+                if (!externalModules.includes(moduleName))
+                  externalModules.push(moduleName)
 
-              asyncImports.push(...convertImportDefinitionToAsyncImport(bundleName, importDefinition, "externalModule" + indexOfExternalModule, undefined, true));
+                const indexOfExternalModule = externalModules.indexOf(moduleName);
+
+                asyncImports.push(...convertImportDefinitionToAsyncImport(bundleName, importDefinition, "externalModule" + indexOfExternalModule, undefined, true));
+
+              }
+
               continue;
             }
 
@@ -80,6 +92,30 @@ export async function builder({
 
             moduleRelativePathToProject += extension;
             moduleName += extension;
+
+            // CSS or asset file
+            if (![".js", ".jsx", ".mjs", ".ts", ".tsx"].find(ext => moduleName.endsWith(ext))) {
+              if (moduleName.endsWith(".css")) {
+                if (!modulesFlatTree[moduleRelativePathToProject]) {
+                  modulesFlatTree[moduleRelativePathToProject] = {
+                    css: true
+                  }
+                }
+
+                if (!modulesFlatTree[moduleRelativePathToProject].parents)
+                  modulesFlatTree[moduleRelativePathToProject].parents = []
+
+                modulesFlatTree[moduleRelativePathToProject].parents.push(safeJSFilePath);
+
+                cssFiles.push(moduleRelativePathToProject);
+                continue;
+              }
+
+              return {
+                contents,
+                loader: "file"
+              }
+            }
 
             const isJSX = moduleName.endsWith("x");
 
@@ -95,7 +131,7 @@ export async function builder({
                 bundleName,
                 useModuleProjectPaths,
                 moduleResolverWrapperFunction
-              }, modulesFlatTree, externalModules));
+              }, modulesFlatTree, externalModules, cssFiles));
 
               if (!modulesFlatTree[moduleRelativePathToProject]) {
                 modulesFlatTree[moduleRelativePathToProject] = {
@@ -125,27 +161,50 @@ export async function builder({
     }]
   })
 
-  return { modulesFlatTree, externalModules }
+  return { modulesFlatTree, externalModules, cssFiles }
 }
 
-export function bundleExternalModules(modulesList, outdir, bundleName) {
-  fs.writeFileSync("./empty.js", "");
-  return build({
-    entryPoints: ['./empty.js'],
+function randomStr(length = 10) {
+  let result = '';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const charactersLength = characters.length;
+  let counter = 0;
+  while (counter < length) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    counter += 1;
+  }
+  return result;
+}
+
+export async function bundleExternalModules(modulesList, outdir, bundleName) {
+  const intermediateFile = `./${randomStr()}.js`;
+  fs.writeFileSync(intermediateFile, modulesList.map((moduleName, i) => `export * as externalModule${i} from "${moduleName}";`).join('\n'));
+  await build({
+    entryPoints: [intermediateFile],
     format: "esm",
     allowOverwrite: true,
     bundle: true,
     outfile: resolve(process.cwd(), outdir, bundleName),
-    plugins: [{
-      name: "recursive-builder",
-      setup(build) {
-        build.onLoad({ filter: /\/empty\.js/ }, async () => {
-          return { contents: modulesList.map((moduleName, i) => `export * as externalModule${i} from "${moduleName}";`).join('\n') }
-        });
-        build.onEnd(() => fs.rmSync("./empty.js"))
-      }
-    }]
   });
+  fs.rmSync(intermediateFile)
+}
+
+export async function bundleCSSFiles(modulesList, outdir, bundleName) {
+  const intermediateJSFile = `./${randomStr()}.js`;
+  const intermediateOutJSFile = resolve(process.cwd(), outdir, intermediateJSFile);
+  const intermediateOutCSSFile = intermediateOutJSFile.slice(0, -3) + ".css";
+  const outCssFile = resolve(process.cwd(), outdir, bundleName);
+  fs.writeFileSync(intermediateJSFile, modulesList.map((moduleName) => `import "${moduleName}";`).join('\n'));
+  await build({
+    entryPoints: [intermediateJSFile],
+    format: "esm",
+    allowOverwrite: true,
+    bundle: true,
+    outfile: intermediateOutJSFile
+  });
+  fs.renameSync(intermediateOutCSSFile, outCssFile);
+  fs.rmSync(intermediateJSFile);
+  fs.rmSync(intermediateOutJSFile);
 }
 
 export default async function({
@@ -162,7 +221,7 @@ export default async function({
     bundleClientName = "/" + bundleOutName
   }
 }) {
-  const { modulesFlatTree, externalModules } = await builder({
+  const { modulesFlatTree, externalModules, cssFiles } = await builder({
     entrypoint,
     outdir,
     recurse,
@@ -174,5 +233,8 @@ export default async function({
   if (bundle) {
     await bundleExternalModules(externalModules, bundleOutdir, bundleOutName);
   }
-  return modulesFlatTree
+  if (cssFiles.length) {
+    await bundleCSSFiles(cssFiles, bundleOutdir, "index.css")
+  }
+  return { modulesFlatTree, cssFiles }
 }

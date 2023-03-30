@@ -5,12 +5,12 @@ const ws = new WebSocket("ws" +
 let tree, basePath;
 
 function getModuleImportPath(modulePath) {
-  if(!tree) tree = {};
+  if (!tree) tree = {};
 
-  if(!tree[modulePath])
+  if (!tree[modulePath])
     tree[modulePath] = {}
 
-  if(!tree[modulePath].id)
+  if (!tree[modulePath].id)
     tree[modulePath].id = 0;
 
   return modulePath.replace(basePath, "") + "?t=" + tree[modulePath].id;
@@ -50,8 +50,22 @@ function displayError(errorData) {
     `;
   }
   errorContainer.innerText = errorData.map(error => `Error in file [${error.location.file}:${error.location.line}]\n` +
-    error.notes.map(errorNote =>`> ${errorNote.location.lineText}`).join("\n") +
+    error.notes.map(errorNote => `> ${errorNote.location.lineText}`).join("\n") +
     `\n${error.text}`).join("\n");
+}
+
+function reloadCSSFile(cssFileName) {
+  const styleTags = document.querySelectorAll("link");
+  const currentTagToRemove = Array.from(styleTags).find(styleTag =>
+    new URL(styleTag.getAttribute("href"), window.location.origin).pathname.endsWith(cssFileName));
+
+  const newTag = document.createElement("link");
+  newTag.href = "/" + cssFileName + "?t=" + Date.now();
+  newTag.setAttribute("rel", "stylesheet");
+
+  document.head.append(newTag);
+
+  currentTagToRemove?.remove();
 }
 
 function sleep(ms) {
@@ -61,7 +75,7 @@ function sleep(ms) {
 async function waitForServer() {
   const signal = AbortSignal.timeout(500);
   try {
-    await fetch(window.location.href, {signal});
+    await fetch(window.location.href, { signal });
   } catch (e) {
     await sleep(100);
     return waitForServer();
@@ -82,6 +96,9 @@ ws.onmessage = async (message) => {
       break;
     case "error":
       displayError(data);
+      break;
+    case "css":
+      reloadCSSFile(data);
       break;
     case "server":
       await sleep(100);
