@@ -112,6 +112,9 @@ ws.onmessage = async (message) => {
       updateModule(data);
       console.log(tree);
       break;
+    case "reload":
+      window.location.reload();
+      break;
     case "server":
       await sleep(100);
       await waitForServer();

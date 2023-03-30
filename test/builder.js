@@ -78,7 +78,7 @@ const testFiles = [
 
   { // 13
     path: "./.test/style.css",
-    contents: `html, body { font-family: sans-serif }`
+    contents: `html, body { font-family: sans-serif; }`
   },
   { // 14
     path: "./.test/asset.json",
@@ -88,12 +88,23 @@ const testFiles = [
     path: "./.test/cssAndAssetImport.js",
     contents: `import "./style.css";
     import assetJSON from "./asset.json";`
-  }
+  },
+
+  { // 16
+    path: "./node_modules/test-module/some-style.css",
+    contents: `p { color: darkgray; }`
+  },
+  { // 17
+    path: "./.test/css-bundling.js",
+    contents: `import "./style.css";
+    import "test-module/some-style.css";`
+  },
 ]
 
 const dirToRemove = [
   { path: "dist" },
-  { path: ".test" }
+  { path: ".test" },
+  { path: "./node_modules/test-module" }
 ]
 
 describe('Builder Watch', function() {
@@ -143,8 +154,13 @@ describe('Builder Watch', function() {
     });
 
     assert.deepEqual(modulesFlatTree, {
-      './.test/entrypoint.js': {},
-      './.test/module.js': { parents: ['./.test/entrypoint.js'] }
+      './.test/entrypoint.js': {
+        imports: new Set(["./.test/module.js"])
+      },
+      './.test/module.js': {
+        imports: new Set(),
+        parents: ['./.test/entrypoint.js']
+      }
     })
     assert.equal(execSync(`node ./dist/.test/entrypoint.js`).toString(), expected);
   });
@@ -158,9 +174,17 @@ describe('Builder Watch', function() {
     });
 
     assert.deepEqual(modulesFlatTree, {
-      './.test/directory/nested/foo.js': {},
-      './.test/bar.js': { parents: ['./.test/directory/nested/foo.js'] },
-      './.test/baz.js': { parents: ['./.test/bar.js'] },
+      './.test/directory/nested/foo.js': {
+        imports: new Set(['./.test/bar.js'])
+      },
+      './.test/bar.js': {
+        imports: new Set(['./.test/baz.js']),
+        parents: ['./.test/directory/nested/foo.js']
+      },
+      './.test/baz.js': {
+        imports: new Set(),
+        parents: ['./.test/bar.js']
+      },
     });
 
     assert.equal(execSync(`node ./dist/.test/directory/nested/foo.js`).toString(), expected);
@@ -175,9 +199,17 @@ describe('Builder Watch', function() {
     });
 
     assert.deepEqual(modulesFlatTree, {
-      './.test/directory/nested/foo2.js': {},
-      './.test/bar2.js': { parents: ['./.test/directory/nested/foo2.js'] },
-      './.test/baz2.js': { parents: ['./.test/bar2.js'] },
+      './.test/directory/nested/foo2.js': {
+        imports: new Set(['./.test/bar2.js'])
+      },
+      './.test/bar2.js': {
+        imports: new Set(['./.test/baz2.js']),
+        parents: ['./.test/directory/nested/foo2.js']
+      },
+      './.test/baz2.js': {
+        imports: new Set(),
+        parents: ['./.test/bar2.js']
+      },
     });
 
     assert.equal(execSync(`node ./dist/.test/directory/nested/foo2.js`).toString(), expected);
@@ -200,8 +232,18 @@ describe('Builder Watch', function() {
     });
 
     assert.deepEqual(modulesFlatTree, {
-      "./.test/externalModule.js": {},
-      "./.test/externalModule2.js": { parents: ["./.test/externalModule.js"] }
+      "./.test/externalModule.js": {
+        imports: new Set([
+          './.test/externalModule2.js',
+          'test-module'
+        ])
+      },
+      "./.test/externalModule2.js": {
+        imports: new Set([
+          'test-module'
+        ]),
+        parents: ["./.test/externalModule.js"]
+      }
     })
 
     assert.ok(fs.existsSync("./dist/.test/externals.js"));
@@ -222,6 +264,21 @@ describe('Builder Watch', function() {
 
     assert.ok(fs.existsSync(modulesFlatTree["./.test/asset.json"].out));
     assert.equal(fs.readFileSync(modulesFlatTree["./.test/asset.json"].out).toString(), testFiles.at(14).contents);
+  });
+
+  it('Should bundle css from node_modules', async function() {
+    await Build({
+      entrypoint: testFiles.at(17).path,
+      outdir: "dist",
+      recurse: true,
+      externalModules: {
+        convert: true
+      }
+    });
+
+    assert.ok(fs.existsSync("./dist/.test/index.css"));
+    assert.ok(fs.readFileSync("./dist/.test/index.css").toString().includes("color: darkgray"));
+    assert.ok(fs.readFileSync("./dist/.test/index.css").toString().includes("font-family: sans-serif"));
   })
 
   after(function() {

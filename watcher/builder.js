@@ -63,12 +63,22 @@ export async function builder({
           const mergedDefinition = mergeImportsDefinitions(importsDefinitions);
           const entries = Array.from(mergedDefinition.entries());
 
+          if (!modulesFlatTree[entrypoint].imports) {
+            modulesFlatTree[entrypoint].imports = new Set();
+          }
+
           const buildPromises = [];
           for (let i = 0; i < entries.length; i++) {
             let [moduleName, importDefinition] = entries[i];
 
             // node_modules
             if (!moduleName.startsWith(".")) {
+              if (moduleName.endsWith(".css") && fs.existsSync(`./node_modules/${moduleName}`)) {
+                cssFiles.push(`./node_modules/${moduleName}`);
+                continue;
+              }
+
+              modulesFlatTree[entrypoint].imports.add(moduleName);
 
               if (convertExternalModules) {
 
@@ -78,7 +88,6 @@ export async function builder({
                 const indexOfExternalModule = externalModules.indexOf(moduleName);
 
                 asyncImports.push(...convertImportDefinitionToAsyncImport(bundleName, importDefinition, "externalModule" + indexOfExternalModule, undefined, true));
-
               }
 
               continue;
@@ -88,6 +97,8 @@ export async function builder({
             const extension = getModulePathExtension(moduleRelativePathToProject);
 
             moduleRelativePathToProject += extension;
+            modulesFlatTree[entrypoint].imports.add(moduleRelativePathToProject);
+
             moduleName += extension;
 
             // CSS or asset file
@@ -142,16 +153,16 @@ export async function builder({
                 useModuleProjectPaths,
                 moduleResolverWrapperFunction
               }, modulesFlatTree, externalModules, cssFiles, assetFiles));
-
-              if (!modulesFlatTree[moduleRelativePathToProject]) {
-                modulesFlatTree[moduleRelativePathToProject] = {}
-              }
-
-              if (!modulesFlatTree[moduleRelativePathToProject].parents)
-                modulesFlatTree[moduleRelativePathToProject].parents = []
-
-              modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
             }
+
+            if (!modulesFlatTree[moduleRelativePathToProject]) {
+              modulesFlatTree[moduleRelativePathToProject] = {}
+            }
+
+            if (!modulesFlatTree[moduleRelativePathToProject].parents)
+              modulesFlatTree[moduleRelativePathToProject].parents = []
+
+            modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
 
             asyncImports.push(...convertImportDefinitionToAsyncImport(useModuleProjectPaths ? moduleRelativePathToProject : moduleName, importDefinition, "module" + i, moduleResolverWrapperFunction));
           }
@@ -195,8 +206,13 @@ export async function bundleExternalModules(modulesList, outdir, bundleName) {
     allowOverwrite: true,
     bundle: true,
     outfile: resolve(process.cwd(), outdir, bundleName),
+    plugins: [{
+      name: "delete-temp-file",
+      setup(build) {
+        build.onEnd(() => fs.rmSync(intermediateFile))
+      }
+    }]
   });
-  fs.rmSync(intermediateFile)
 }
 
 export async function bundleCSSFiles(modulesList, outdir, bundleName) {
@@ -210,11 +226,18 @@ export async function bundleCSSFiles(modulesList, outdir, bundleName) {
     format: "esm",
     allowOverwrite: true,
     bundle: true,
-    outfile: intermediateOutJSFile
+    outfile: intermediateOutJSFile,
+    plugins: [{
+      name: "copy-files",
+      setup(build) {
+        build.onEnd(() => {
+          fs.renameSync(intermediateOutCSSFile, outCssFile);
+          fs.rmSync(intermediateJSFile);
+          fs.rmSync(intermediateOutJSFile);
+        })
+      }
+    }]
   });
-  fs.renameSync(intermediateOutCSSFile, outCssFile);
-  fs.rmSync(intermediateJSFile);
-  fs.rmSync(intermediateOutJSFile);
 }
 
 export default async function({

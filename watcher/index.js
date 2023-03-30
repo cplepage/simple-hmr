@@ -5,20 +5,28 @@ import fs from "fs"
 
 const clientWatcherScript = fs.readFileSync("./watcher/client.js");
 
+const equalSets = (xs, ys) => xs.size === ys.size
+  && [...xs].every((x) => ys.has(x))
+
 export default async function(clientEntrypoint, serverEntrypoint) {
   const clientBaseDir = dirname(clientEntrypoint);
-  const clientBuild = await Builder({
-    entrypoint: clientEntrypoint,
-    recurse: true,
-    useModuleProjectPaths: true,
-    moduleResolverWrapperFunction: "getModuleImportPath",
-    externalModules: {
-      convert: true,
-      bundle: true,
-      bundleOutdir: resolve("dist", clientBaseDir)
-    }
-  });
-  const clientModuleTree = clientBuild.modulesFlatTree;
+  let clientModuleTree;
+  const reloadClientBuild = async () => {
+    const clientBuild = await Builder({
+      entrypoint: clientEntrypoint,
+      recurse: true,
+      useModuleProjectPaths: true,
+      moduleResolverWrapperFunction: "getModuleImportPath",
+      externalModules: {
+        convert: true,
+        bundle: true,
+        bundleOutdir: resolve("dist", clientBaseDir)
+      }
+    });
+    clientModuleTree = clientBuild.modulesFlatTree;
+  }
+  await reloadClientBuild();
+
 
 
   const serverBuild = await Builder({
@@ -152,8 +160,16 @@ export default async function(clientEntrypoint, serverEntrypoint) {
         return;
       }
 
+      if (eventType === "rename") {
+        activeWS.forEach(ws => ws.send(JSON.stringify({
+          type: "reload"
+        })));
+        return;
+      }
+
+      let modulesFlatTree;
       try {
-        await Builder({
+        modulesFlatTree = (await Builder({
           entrypoint: modulePath,
           recurse: false,
           useModuleProjectPaths: true,
@@ -162,11 +178,19 @@ export default async function(clientEntrypoint, serverEntrypoint) {
             convert: true,
             bundle: false
           }
-        });
+        })).modulesFlatTree;
       } catch (e) {
         activeWS.forEach(ws => ws.send(JSON.stringify({
           type: "error",
           data: e.errors
+        })));
+        return;
+      }
+
+      if (!equalSets(modulesFlatTree[modulePath].imports, clientModuleTree[modulePath].imports)) {
+        await reloadClientBuild();
+        activeWS.forEach(ws => ws.send(JSON.stringify({
+          type: "reload"
         })));
         return;
       }
