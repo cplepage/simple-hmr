@@ -26,12 +26,8 @@ export async function builder({
 
   const currentDir = dirname(entrypoint);
 
-  const isJSX = entrypoint.endsWith("x");
-  const safeJSFilePath = isJSX ? entrypoint.slice(0, -1) : entrypoint;
-  if (!modulesFlatTree[safeJSFilePath]) {
-    modulesFlatTree[safeJSFilePath] = {
-      jsx: isJSX
-    }
+  if (!modulesFlatTree[entrypoint]) {
+    modulesFlatTree[entrypoint] = {}
   }
 
   await build({
@@ -97,15 +93,13 @@ export async function builder({
             if (![".js", ".jsx", ".mjs", ".ts", ".tsx"].find(ext => moduleName.endsWith(ext))) {
               if (moduleName.endsWith(".css")) {
                 if (!modulesFlatTree[moduleRelativePathToProject]) {
-                  modulesFlatTree[moduleRelativePathToProject] = {
-                    css: true
-                  }
+                  modulesFlatTree[moduleRelativePathToProject] = {}
                 }
 
                 if (!modulesFlatTree[moduleRelativePathToProject].parents)
                   modulesFlatTree[moduleRelativePathToProject].parents = []
 
-                modulesFlatTree[moduleRelativePathToProject].parents.push(safeJSFilePath);
+                modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
 
                 cssFiles.push(moduleRelativePathToProject);
                 continue;
@@ -117,10 +111,6 @@ export async function builder({
               }
             }
 
-            const isJSX = moduleName.endsWith("x");
-
-            moduleRelativePathToProject = isJSX ? moduleRelativePathToProject.slice(0, -1) : moduleRelativePathToProject;
-            moduleName = isJSX ? moduleName.slice(0, -1) : moduleName;
 
             if (recurse) {
               buildPromises.push(builder({
@@ -134,15 +124,13 @@ export async function builder({
               }, modulesFlatTree, externalModules, cssFiles));
 
               if (!modulesFlatTree[moduleRelativePathToProject]) {
-                modulesFlatTree[moduleRelativePathToProject] = {
-                  jsx: isJSX
-                }
+                modulesFlatTree[moduleRelativePathToProject] = {}
               }
 
               if (!modulesFlatTree[moduleRelativePathToProject].parents)
                 modulesFlatTree[moduleRelativePathToProject].parents = []
 
-              modulesFlatTree[moduleRelativePathToProject].parents.push(safeJSFilePath);
+              modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
             }
 
             asyncImports.push(...convertImportDefinitionToAsyncImport(useModuleProjectPaths ? moduleRelativePathToProject : moduleName, importDefinition, "module" + i, moduleResolverWrapperFunction));
@@ -152,9 +140,11 @@ export async function builder({
 
           return {
             contents: replaceLines(lines[0], lines[1], contents, asyncImports.join(" ")),
-            loader: path.endsWith(".jsx")
-              ? "jsx"
-              : "js"
+            loader: path.endsWith(".ts")
+              ? "ts"
+              : path.endsWith(".jsx") || path.endsWith(".tsx")
+                ? "jsx"
+                : "js"
           }
         });
       }
@@ -230,6 +220,7 @@ export default async function({
     convertExternalModules: convert,
     bundleName: bundleClientName
   });
+
   if (bundle) {
     await bundleExternalModules(externalModules, bundleOutdir, bundleOutName);
   }

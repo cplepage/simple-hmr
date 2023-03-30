@@ -5,6 +5,10 @@ const ws = new WebSocket("ws" +
 let tree, basePath;
 
 function getModuleImportPath(modulePath) {
+  const modulePathSplitAtDots = modulePath.split(".");
+  modulePathSplitAtDots.pop();
+  const safeJSModulePath = modulePathSplitAtDots.join(".") + ".js";
+
   if (!tree) tree = {};
 
   if (!tree[modulePath])
@@ -13,7 +17,7 @@ function getModuleImportPath(modulePath) {
   if (!tree[modulePath].id)
     tree[modulePath].id = 0;
 
-  return modulePath.replace(basePath, "") + "?t=" + tree[modulePath].id;
+  return safeJSModulePath.replace(basePath, "") + "?t=" + tree[modulePath].id;
 }
 
 function crawlToRoot(modulePath, id) {

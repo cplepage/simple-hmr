@@ -33,10 +33,13 @@ export default async function(clientEntrypoint, serverEntrypoint) {
 
 
   global.getModuleImportPath = (modulePath, currentModulePath) => {
+    const modulePathSplitAtDots = modulePath.split(".");
+    modulePathSplitAtDots.pop();
+    const safeJSModulePath = modulePathSplitAtDots.join(".") + ".js";
     const fixedModulePath = resolve(dirname((new URL(currentModulePath)).pathname), modulePath)
       .replace(process.cwd(), ".")
       .replace("/dist", "");
-    return modulePath + (serverModuleTree && serverModuleTree[fixedModulePath].id ? "?t=" + serverModuleTree[fixedModulePath].id : "")
+    return safeJSModulePath + (serverModuleTree && serverModuleTree[fixedModulePath].id ? "?t=" + serverModuleTree[fixedModulePath].id : "")
   };
 
   let server, activeSockets = new Set();
@@ -116,11 +119,8 @@ export default async function(clientEntrypoint, serverEntrypoint) {
 
 
   Object.keys(clientModuleTree).forEach(modulePath => {
-    const isCSS = clientModuleTree[modulePath].css;
-    const isJSX = clientModuleTree[modulePath].jsx;
-    modulePath = isJSX ? modulePath + "x" : modulePath
     fs.watch(modulePath, async () => {
-      if (isCSS) {
+      if (modulePath.endsWith(".css")) {
         await bundleCSSFiles(clientBuild.cssFiles, resolve("dist", clientBaseDir), "index.css");
 
         activeWS.forEach(ws => ws.send(JSON.stringify({
@@ -153,7 +153,7 @@ export default async function(clientEntrypoint, serverEntrypoint) {
 
       activeWS.forEach(ws => ws.send(JSON.stringify({
         type: "module",
-        data: isJSX ? modulePath.slice(0, -1) : modulePath
+        data: modulePath
       })));
 
     });
@@ -172,8 +172,6 @@ export default async function(clientEntrypoint, serverEntrypoint) {
   }
 
   Object.keys(serverModuleTree).forEach(modulePath => {
-    const isJSX = serverModuleTree[modulePath].jsx;
-    modulePath = isJSX ? modulePath + "x" : modulePath
     fs.watch(modulePath, async () => {
 
       try {

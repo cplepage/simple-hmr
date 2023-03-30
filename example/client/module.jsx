@@ -13,7 +13,7 @@ export default function() {
 
   return <div>
     <label>
-    This is fetched from the server :
+      This is fetched from the server :
     </label>
 
     <Box>
@@ -22,7 +22,7 @@ export default function() {
 
     <p>Edit <code>./example/server/endpoint.js</code> and see the change happen live!</p>
 
-    <Button label="Button"  />
+    <Button label="Button" />
 
   </div>
 }
