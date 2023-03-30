@@ -10,9 +10,9 @@ const equalSets = (xs, ys) => xs.size === ys.size
 
 export default async function(clientEntrypoint, serverEntrypoint) {
   const clientBaseDir = dirname(clientEntrypoint);
-  let clientModuleTree;
+  let clientBuild, clientModuleTree;
   const reloadClientBuild = async () => {
-    const clientBuild = await Builder({
+    clientBuild = await Builder({
       entrypoint: clientEntrypoint,
       recurse: true,
       useModuleProjectPaths: true,
