@@ -272,6 +272,28 @@ export function mergeImportsDefinitions(definitions) {
 export function convertImportDefinitionToAsyncImport(moduleName, importDefinition, moduleIntermediateName, moduleResolverWrapperFunction, forceNamedImport) {
   if (typeof moduleName !== "string") return null;
 
+  if (moduleName.endsWith(".css")) return [];
+
+  const fileLoader = [
+    ".png",
+    ".jpg",
+    ".svg",
+    ".webp",
+    ".gif",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".json"
+  ].find(ext => moduleName.endsWith(ext));
+  if (fileLoader) {
+    return [
+      moduleResolverWrapperFunction
+        ? `const ${Array.from(importDefinition.defaultImports).join(", ")} = ${moduleResolverWrapperFunction}("${moduleName}");`
+        : `const ${Array.from(importDefinition.defaultImports).join(", ")} = "${moduleName}";`
+    ]
+  }
+
   let importString = moduleResolverWrapperFunction
     ? `await import(${moduleResolverWrapperFunction}("${moduleName}", import.meta.url));`
     : `await import("${moduleName}");`;

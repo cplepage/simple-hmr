@@ -2,12 +2,15 @@ const ws = new WebSocket("ws" +
   (window.location.protocol === "https:" ? "s" : "") +
   "://" + window.location.host);
 
-let tree, basePath;
+let tree, basePath, assetsPath;
 
 function getModuleImportPath(modulePath) {
   const modulePathSplitAtDots = modulePath.split(".");
-  modulePathSplitAtDots.pop();
-  const safeJSModulePath = modulePathSplitAtDots.join(".") + ".js";
+  const ext = modulePathSplitAtDots.pop();
+
+  const safeJSModulePath = ["js", "jsx", "mjs", "ts", "tsx"].includes(ext)
+    ? modulePathSplitAtDots.join(".") + ".js"
+    : assetsPath + "/" + tree[modulePath].assetName;
 
   if (!tree) tree = {};
 
@@ -93,6 +96,7 @@ ws.onmessage = async (message) => {
     case "setup":
       tree = data.tree;
       basePath = data.basePath;
+      assetsPath = data.assetsPath;
       break;
     case "module":
       removeError()
@@ -103,6 +107,10 @@ ws.onmessage = async (message) => {
       break;
     case "css":
       reloadCSSFile(data);
+      break;
+    case "asset":
+      updateModule(data);
+      console.log(tree);
       break;
     case "server":
       await sleep(100);

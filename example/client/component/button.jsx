@@ -5,7 +5,7 @@ export default function({ label, onClick }) {
     // Edit the styles here!!!
     color: "white",
     border: 0,
-    padding: "10px 20px",
+    padding: "10px 40px",
     borderRadius: 6,
     cursor: "pointer"
   }} onClick={() => { if (onClick) onClick() }}>{label}</button>;

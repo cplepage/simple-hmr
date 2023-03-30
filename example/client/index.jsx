@@ -14,6 +14,7 @@ createRoot(document.querySelector("#root")).render(<>
     It is a very simple Client Hot Module Replacement and Server Hot Reload setup.
     The DX is quite amazing!
   </p>
+
   <p>
     Edit any files in the <code>./example</code> directory and see the live change happen!
   </p>

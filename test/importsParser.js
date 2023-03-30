@@ -22,6 +22,8 @@ const testString = `// this is comment in my file
   import defaultExport, * as name from "module-name";
   import "module"
   import myModule,{nameFunction} from "./myModule"
+  import "./style.css";
+  import assetURL from "./asset.png"
 
   export function foo(){
     return "bar";
@@ -55,7 +57,7 @@ describe('Imports Parser', function() {
     });
 
     assert.deepEqual(tokenizeImports(testString), {
-      lines: [2, 17],
+      lines: [2, 19],
       statements: [
         ["import", "defaultExport", "from", "\"module-name\""], // 0
         ["import", "*", "as", "name", "from", "\"module-name-1\""],// 1
@@ -68,6 +70,8 @@ describe('Imports Parser', function() {
         ["import", "defaultExport", ",", "*", "as", "name", "from", "\"module-name\""], // 8
         ["import", "\"module\""], // 9
         ["import", "myModule", ",", "{", "nameFunction", "}", "from", "\"./myModule\""], // 10
+        ["import", "\"./style.css\""], // 11
+        ["import", "assetURL", "from", "\"./asset.png\""], // 12
       ]
     });
   });
@@ -159,6 +163,15 @@ describe('Imports Parser', function() {
         name: "nameFunction"
       }]
     });
+
+    assert.deepEqual(analyzeRawImportStatement(statements.at(11)), {
+      module: "./style.css"
+    });
+
+    assert.deepEqual(analyzeRawImportStatement(statements.at(12)), {
+      module: "./asset.png",
+      defaultImports: ["assetURL"]
+    });
   });
 
 
@@ -212,8 +225,10 @@ describe('Imports Parser', function() {
         namedImports: [{
           name: "nameFunction"
         }]
-      }
-      ]
+      }], ["./style.css", {}],
+      ["./asset.png", {
+        defaultImports: new Set(["assetURL"])
+      }]
     ]))
   })
 
@@ -223,7 +238,7 @@ describe('Imports Parser', function() {
 
     assert.deepEqual(convertImportDefinitionToAsyncImport("string"), [`await import("string");`]);
 
-    assert.deepEqual(convertImportDefinitionToAsyncImport("./myModule", {}, "", "fixModuleImportPath"), [`await import(fixModuleImportPath("./myModule"));`])
+    assert.deepEqual(convertImportDefinitionToAsyncImport("./myModule", {}, "", "fixModuleImportPath"), [`await import(fixModuleImportPath("./myModule", import.meta.url));`])
     assert.deepEqual(convertImportDefinitionToAsyncImport("./myModule", { defaultImports: ["defaultExport"] }, "intermediateModule"), [
       `const intermediateModule = await import("./myModule");`,
       `const defaultExport = intermediateModule.default;`
@@ -255,6 +270,11 @@ describe('Imports Parser', function() {
       `const alias1 = module0.export1;`,
       `const { export2 } = module0;`,
       `const alias2 = module0.export2;`,
+    ]);
+
+    assert.deepEqual(convertImportDefinitionToAsyncImport("./style.css", mergedDefinition.get("./style.css")), []);
+    assert.deepEqual(convertImportDefinitionToAsyncImport("./asset.png", mergedDefinition.get("./asset.png")), [
+      `const assetURL = "./asset.png";`
     ]);
   })
 
@@ -288,7 +308,8 @@ describe('Imports Parser', function() {
       `await import("module");`,
       `const module4 = await import("./myModule");`,
       `const myModule = module4.default;`,
-      `const { nameFunction } = module4;`
+      `const { nameFunction } = module4;`,
+      `const assetURL = \"./asset.png\";`
     ])
   });
 

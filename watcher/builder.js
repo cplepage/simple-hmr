@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { dirname, resolve } from "path";
+import path, { dirname, resolve } from "path";
 import fs from "fs";
 import {
   analyzeRawImportStatement, convertImportDefinitionToAsyncImport,
@@ -19,9 +19,11 @@ export async function builder({
   outdir = "dist",
   useModuleProjectPaths,
   convertExternalModules,
+  assetDir,
+  publicPath,
   bundleName,
   moduleResolverWrapperFunction
-}, modulesFlatTree = {}, externalModules = [], cssFiles = []) {
+}, modulesFlatTree = {}, externalModules = [], cssFiles = [], assetFiles = []) {
   entrypoint = entrypoint + getModulePathExtension(entrypoint);
 
   const currentDir = dirname(entrypoint);
@@ -35,7 +37,6 @@ export async function builder({
     outdir: resolve(process.cwd(), outdir, currentDir),
     format: "esm",
     allowOverwrite: true,
-    assetNames: '[name]',
     plugins: [{
       name: "recursive-builder",
       setup(build) {
@@ -91,24 +92,41 @@ export async function builder({
 
             // CSS or asset file
             if (![".js", ".jsx", ".mjs", ".ts", ".tsx"].find(ext => moduleName.endsWith(ext))) {
+
+              if (!modulesFlatTree[moduleRelativePathToProject]) {
+                modulesFlatTree[moduleRelativePathToProject] = {}
+              }
+
+              if (!modulesFlatTree[moduleRelativePathToProject].parents)
+                modulesFlatTree[moduleRelativePathToProject].parents = []
+
+              modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
+
               if (moduleName.endsWith(".css")) {
-                if (!modulesFlatTree[moduleRelativePathToProject]) {
-                  modulesFlatTree[moduleRelativePathToProject] = {}
-                }
-
-                if (!modulesFlatTree[moduleRelativePathToProject].parents)
-                  modulesFlatTree[moduleRelativePathToProject].parents = []
-
-                modulesFlatTree[moduleRelativePathToProject].parents.push(entrypoint);
-
                 cssFiles.push(moduleRelativePathToProject);
-                continue;
+              } else {
+
+                const pathSplitAtSlash = moduleRelativePathToProject.split("/");
+                const assetFileName = pathSplitAtSlash.pop();
+
+                const assetFileNameSplitAtDots = assetFileName.split(".");
+                const extension = assetFileNameSplitAtDots.pop();
+
+                const uniqName = `${assetFileNameSplitAtDots.join(".")}-${randomStr(5)}.${extension}`
+
+                assetFiles.push({
+                  assetPath: moduleRelativePathToProject,
+                  uniqName
+                });
+
+                modulesFlatTree[moduleRelativePathToProject].assetName = uniqName;
+
+                pathSplitAtSlash.push(uniqName);
+
+                asyncImports.push(...convertImportDefinitionToAsyncImport(moduleRelativePathToProject, importDefinition, null, moduleResolverWrapperFunction));
               }
 
-              return {
-                contents,
-                loader: "file"
-              }
+              continue;
             }
 
 
@@ -119,9 +137,11 @@ export async function builder({
                 outdir,
                 convertExternalModules,
                 bundleName,
+                assetDir,
+                publicPath,
                 useModuleProjectPaths,
                 moduleResolverWrapperFunction
-              }, modulesFlatTree, externalModules, cssFiles));
+              }, modulesFlatTree, externalModules, cssFiles, assetFiles));
 
               if (!modulesFlatTree[moduleRelativePathToProject]) {
                 modulesFlatTree[moduleRelativePathToProject] = {}
@@ -151,7 +171,7 @@ export async function builder({
     }]
   })
 
-  return { modulesFlatTree, externalModules, cssFiles }
+  return { modulesFlatTree, externalModules, cssFiles, assetFiles }
 }
 
 function randomStr(length = 10) {
@@ -203,29 +223,46 @@ export default async function({
   recurse,
   useModuleProjectPaths = false,
   moduleResolverWrapperFunction,
+  assetDir = "assets",
+  publicPath = "/",
   externalModules: {
     convert,
     bundle,
-    bundleOutdir = outdir,
     bundleOutName = "externals.js",
     bundleClientName = "/" + bundleOutName
   }
 }) {
-  const { modulesFlatTree, externalModules, cssFiles } = await builder({
+  const { modulesFlatTree, externalModules, cssFiles, assetFiles } = await builder({
     entrypoint,
     outdir,
     recurse,
     useModuleProjectPaths,
     moduleResolverWrapperFunction,
+    assetDir,
+    publicPath,
     convertExternalModules: convert,
     bundleName: bundleClientName
   });
 
+  const entrypointDir = dirname(entrypoint);
+  const mainOutDir = resolve(outdir, entrypointDir);
+
   if (bundle) {
-    await bundleExternalModules(externalModules, bundleOutdir, bundleOutName);
+    await bundleExternalModules(externalModules, mainOutDir, bundleOutName);
   }
+
   if (cssFiles.length) {
-    await bundleCSSFiles(cssFiles, bundleOutdir, "index.css")
+    await bundleCSSFiles(cssFiles, mainOutDir, "index.css")
   }
-  return { modulesFlatTree, cssFiles }
+
+  if (assetFiles.length) {
+    const assetDirectory = resolve(mainOutDir, assetDir);
+    if (!fs.existsSync(assetDirectory)) fs.mkdirSync(assetDirectory, { recursive: true });
+    assetFiles.forEach(asset => {
+      modulesFlatTree[asset.assetPath].out = resolve(assetDirectory, asset.uniqName);
+      fs.copyFileSync(asset.assetPath, resolve(assetDirectory, asset.uniqName));
+    })
+  }
+
+  return { modulesFlatTree, cssFiles, assetFiles }
 }

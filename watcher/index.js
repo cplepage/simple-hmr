@@ -112,21 +112,42 @@ export default async function(clientEntrypoint, serverEntrypoint) {
       type: "setup",
       data: {
         tree: clientModuleTree,
-        basePath: clientBaseDir
+        basePath: clientBaseDir,
+        assetsPath: "/assets"
       }
     }));
   });
 
 
+  const clientFilesWatchers = new Map();
+
   Object.keys(clientModuleTree).forEach(modulePath => {
-    fs.watch(modulePath, async () => {
-      if (modulePath.endsWith(".css")) {
-        await bundleCSSFiles(clientBuild.cssFiles, resolve("dist", clientBaseDir), "index.css");
+
+    const initWatch = () => fs.watch(modulePath, async (eventType, filename) => {
+      if (!["js", "jsx", "mjs", "ts", "tsx"].find(ext => modulePath.endsWith(ext))) {
+
+        if (modulePath.endsWith(".css")) {
+          await bundleCSSFiles(clientBuild.cssFiles, resolve("dist", clientBaseDir), "index.css");
+
+          activeWS.forEach(ws => ws.send(JSON.stringify({
+            type: "css",
+            data: "index.css"
+          })));
+
+          return;
+        }
+
+        fs.copyFileSync(modulePath, clientModuleTree[modulePath].out)
 
         activeWS.forEach(ws => ws.send(JSON.stringify({
-          type: "css",
-          data: "index.css"
+          type: "asset",
+          data: modulePath
         })));
+
+        if (!fs.existsSync(filename)) {
+          clientFilesWatchers.get(modulePath).close();
+          clientFilesWatchers.set(modulePath, initWatch());
+        }
 
         return;
       }
@@ -156,7 +177,9 @@ export default async function(clientEntrypoint, serverEntrypoint) {
         data: modulePath
       })));
 
-    });
+    })
+
+    clientFilesWatchers.set(modulePath, initWatch());
   });
 
   function crawlToRoot(modulePath, id) {
