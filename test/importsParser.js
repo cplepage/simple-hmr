@@ -24,6 +24,7 @@ const testString = `// this is comment in my file
   import myModule,{nameFunction} from "./myModule"
   import "./style.css";
   import assetURL from "./asset.png"
+  import type {sometype} from "../module";
 
   export function foo(){
     return "bar";
@@ -57,7 +58,7 @@ describe('Imports Parser', function() {
     });
 
     assert.deepEqual(tokenizeImports(testString), {
-      lines: [2, 19],
+      lines: [2, 20],
       statements: [
         ["import", "defaultExport", "from", "\"module-name\""], // 0
         ["import", "*", "as", "name", "from", "\"module-name-1\""],// 1
@@ -72,6 +73,7 @@ describe('Imports Parser', function() {
         ["import", "myModule", ",", "{", "nameFunction", "}", "from", "\"./myModule\""], // 10
         ["import", "\"./style.css\""], // 11
         ["import", "assetURL", "from", "\"./asset.png\""], // 12
+        ["import", "type", "{", "sometype", "}", "from", "\"../module\""], // 13
       ]
     });
   });
@@ -172,6 +174,14 @@ describe('Imports Parser', function() {
       module: "./asset.png",
       defaultImports: ["assetURL"]
     });
+
+    assert.deepEqual(analyzeRawImportStatement(statements.at(13)), {
+      module: "../module",
+      type: true,
+      namedImports: [{
+        name: "sometype"
+      }]
+    });
   });
 
 
@@ -228,6 +238,12 @@ describe('Imports Parser', function() {
       }], ["./style.css", {}],
       ["./asset.png", {
         defaultImports: new Set(["assetURL"])
+      }],
+      ["../module", {
+        type: true,
+        namedImports: [{
+          name: "sometype"
+        }]
       }]
     ]))
   })
@@ -276,6 +292,10 @@ describe('Imports Parser', function() {
     assert.deepEqual(convertImportDefinitionToAsyncImport("./asset.png", mergedDefinition.get("./asset.png")), [
       `const assetURL = "./asset.png";`
     ]);
+
+    assert.deepEqual(convertImportDefinitionToAsyncImport("../module", mergedDefinition.get("../module")), [
+      `import type { sometype } from "../module";`
+    ]);
   })
 
 
@@ -309,7 +329,8 @@ describe('Imports Parser', function() {
       `const module4 = await import("./myModule");`,
       `const myModule = module4.default;`,
       `const { nameFunction } = module4;`,
-      `const assetURL = \"./asset.png\";`
+      `const assetURL = \"./asset.png\";`,
+      `import type { sometype } from "../module";`,
     ])
   });
 

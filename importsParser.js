@@ -143,7 +143,8 @@ export function analyzeRawImportStatement(importStatement) {
     defaultImports = [],
     namespaceImports = [],
     namedImports = [],
-    inNamedImport = false;
+    inNamedImport = false,
+    foundType = false;
 
   const analyzeAccumulator = () => {
     if (!accumulator.length) return;
@@ -173,6 +174,11 @@ export function analyzeRawImportStatement(importStatement) {
   }
 
   for (const word of importations) {
+    if(word === "type"){
+      foundType = true;
+      continue;
+    }
+
     if (word === ",") {
       analyzeAccumulator();
       continue;
@@ -203,6 +209,9 @@ export function analyzeRawImportStatement(importStatement) {
   if (namedImports.length)
     definition.namedImports = namedImports;
 
+  if (foundType)
+    definition.type = true;
+
   return definition;
 }
 
@@ -225,10 +234,12 @@ export function mergeImportsDefinitions(definitions) {
   for (const definition of definitions) {
     if (!definition.module) continue;
 
-
     let moduleDef = importsDefinition.get(definition.module);
     if (!moduleDef)
       moduleDef = {}
+
+    if (definition.type)
+      moduleDef.type = true;
 
     if (definition.defaultImports) {
       if (!moduleDef.defaultImports)
@@ -274,6 +285,33 @@ export function convertImportDefinitionToAsyncImport(moduleName, importDefinitio
 
   if (moduleName.endsWith(".css")) return [];
 
+  if(importDefinition?.type){
+    let importations = [];
+    importDefinition.defaultImports?.forEach(defaultImport => {
+      importations.push(defaultImport)
+    });
+
+    importDefinition.namespaceImports?.forEach(nsImport => {
+      importations.push(`* as ${nsImport}`);
+    });
+
+    importDefinition.namedImports?.forEach((namedImport, i) => {
+      let importation = i === 0 ? "{ " : "";
+
+      if (namedImport.alias) {
+        importation += `${namedImport.name} as ${namedImport.alias}`;
+      } else {
+        importation += namedImport.name;
+      }
+
+      if(i === importDefinition.namedImports.length - 1) importation += " }";
+
+      importations.push(importation);
+    });
+
+    return [ `import type ${importations.join(" ,")} from "${moduleName}";` ]
+  }
+
   const fileLoader = [
     ".png",
     ".jpg",
@@ -298,7 +336,7 @@ export function convertImportDefinitionToAsyncImport(moduleName, importDefinitio
     ? `await import(${moduleResolverWrapperFunction}("${moduleName}", import.meta.url));`
     : `await import("${moduleName}");`;
 
-  if (!(importDefinition?.defaultImports || importDefinition?.namespaceImports || importDefinition?.namedImports))
+  if (!importDefinition?.defaultImports && !importDefinition?.namespaceImports && !importDefinition?.namedImports)
     return [importString];
 
   moduleIntermediateName = moduleIntermediateName ?? "module0";
