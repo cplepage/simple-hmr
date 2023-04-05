@@ -2,6 +2,7 @@ export function tokenizeImports(content) {
   if (!content || typeof content !== 'string') return null;
 
   const statements = [];
+  const dynamics = [];
 
   let accumulator = [""],
     line = 0,
@@ -9,7 +10,8 @@ export function tokenizeImports(content) {
     inComment = false,
     inImportStatement = false,
     inNamingImport = false,
-    inModuleName = false;
+    inModuleName = false,
+    inDynamicImport = false;
   for (const char of content) {
     if (char === "\n") line++;
 
@@ -56,6 +58,29 @@ export function tokenizeImports(content) {
         accumulator.push("");
     }
 
+    /*
+    *
+    * await import("module-name")
+    *                           ⌃ Here
+    */
+    if (inDynamicImport && char === ")") {
+      accumulator.push(char);
+      dynamics.push({
+        line,
+        statement: accumulator
+      });
+      inDynamicImport = false;
+      accumulator = [];
+      continue;
+    }
+
+
+    if (char === "(" || char === ")") {
+      accumulator.push(char);
+      accumulator.push("");
+      continue;
+    }
+
     accumulator[accumulator.length - 1] += char;
 
     const currentWord = accumulator[accumulator.length - 1];
@@ -71,7 +96,7 @@ export function tokenizeImports(content) {
     * import { export1, export2 } from "module-name"
     * ⌃ Here
     */
-    if (currentWord === "import" && accumulator.length === 1) {
+    if (currentWord === "import" && accumulator.length === 1 && !inDynamicImport) {
       if (lineStart === undefined)
         lineStart = line;
 
@@ -110,11 +135,22 @@ export function tokenizeImports(content) {
       inModuleName = true;
     }
 
+    /*
+    *
+    * await import("module-name")
+    *       ⌃ Here
+    */
+    if (currentWord === "import" && accumulator.length > 1) {
+      inDynamicImport = true;
+      accumulator = accumulator.slice(accumulator.length - 1);
+    }
+
   }
 
   return {
     lines: [lineStart, lineEnd],
-    statements
+    statements,
+    dynamics
   };
 }
 
@@ -174,7 +210,7 @@ export function analyzeRawImportStatement(importStatement) {
   }
 
   for (const word of importations) {
-    if(word === "type"){
+    if (word === "type") {
       foundType = true;
       continue;
     }
@@ -285,7 +321,7 @@ export function convertImportDefinitionToAsyncImport(moduleName, importDefinitio
 
   if (moduleName.endsWith(".css")) return [];
 
-  if(importDefinition?.type){
+  if (importDefinition?.type) {
     let importations = [];
     importDefinition.defaultImports?.forEach(defaultImport => {
       importations.push(defaultImport)
@@ -304,12 +340,12 @@ export function convertImportDefinitionToAsyncImport(moduleName, importDefinitio
         importation += namedImport.name;
       }
 
-      if(i === importDefinition.namedImports.length - 1) importation += " }";
+      if (i === importDefinition.namedImports.length - 1) importation += " }";
 
       importations.push(importation);
     });
 
-    return [ `import type ${importations.join(" ,")} from "${moduleName}";` ]
+    return [`import type ${importations.join(" ,")} from "${moduleName}";`]
   }
 
   const fileLoader = [
@@ -380,4 +416,32 @@ export function replaceLines(from, to, content, data) {
     contentLines[i] = "";
   }
   return contentLines.join("\n");
+}
+
+/*
+*
+* ["import", "(", "\"module-name\"", ")"]
+*
+*/
+export function analyzeDynamicImport(dynamicImport) {
+  const indexOfFirstParenthesis = dynamicImport.statement.indexOf("(");
+  const indexOfLastParenthesis = dynamicImport.statement.indexOf(")");
+
+  const isolatedModuleName = dynamicImport.statement.slice(indexOfFirstParenthesis + 1, indexOfLastParenthesis);
+
+  if (isolatedModuleName.length !== 1
+    || isolatedModuleName.at(0).includes("+")
+    || !isolatedModuleName.at(0).match(/^(".*"|'.*')$/)) return null;
+
+  const module = isolatedModuleName.at(0).slice(1, -1)
+  return {
+    module,
+    line: dynamicImport.line
+  }
+}
+
+export function reconstructDynamicImport(analyzedDynamicImport, moduleResolverWrapperFunction) {
+  return moduleResolverWrapperFunction
+    ? `import(${moduleResolverWrapperFunction}("${analyzedDynamicImport.module}"))`
+    : `import("${analyzedDynamicImport.module}")`;
 }

@@ -1,7 +1,8 @@
 import assert from "assert";
 import {
   analyzeRawImportStatement, convertImportDefinitionToAsyncImport,
-  mergeImportsDefinitions, replaceLines, tokenizeImports
+  mergeImportsDefinitions, replaceLines, tokenizeImports, analyzeDynamicImport,
+  reconstructDynamicImport
 } from "../importsParser.js";
 
 const testString = `// this is comment in my file
@@ -32,6 +33,8 @@ const testString = `// this is comment in my file
 
   const asyncModule = await import("./myOtherModule");
 
+  const externalModule = (await import("a-module")).foo
+
   const x = "baz";
 
   export default x;
@@ -50,11 +53,16 @@ describe('Imports Parser', function() {
     assert.deepEqual(tokenizeImports(2), null);
     assert.deepEqual(tokenizeImports(`// just a comment`), {
       lines: [undefined, undefined],
-      statements: []
+      statements: [],
+      dynamics: []
     });
     assert.deepEqual(tokenizeImports(`const x = await import("./myModule"); function noImports(){ return "nothing" }`), {
       lines: [undefined, undefined],
-      statements: []
+      statements: [],
+      dynamics: [{
+        line: 0,
+        statement: ["import", "(", "\"./myModule\"", ")"]
+      }]
     });
 
     assert.deepEqual(tokenizeImports(testString), {
@@ -74,7 +82,14 @@ describe('Imports Parser', function() {
         ["import", "\"./style.css\""], // 11
         ["import", "assetURL", "from", "\"./asset.png\""], // 12
         ["import", "type", "{", "sometype", "}", "from", "\"../module\""], // 13
-      ]
+      ],
+      dynamics: [{
+        line: 26,
+        statement: ["import", "(", "\"./myOtherModule\"", ")"]
+      }, {
+        line: 28,
+        statement: ["import", "(", "\"a-module\"", ")"]
+      }]
     });
   });
 
@@ -298,6 +313,25 @@ describe('Imports Parser', function() {
     ]);
   })
 
+  it('Should add a wrapper function for module resolvement of dynamic imports', function() {
+    assert.deepEqual(analyzeDynamicImport({ statement: ["import", "(", "var+\"module-name\"", ")"] }), null);
+    assert.deepEqual(analyzeDynamicImport({ statement: ["import", "(", "var", "+", "\"module-name\"", ")"] }), null);
+
+    assert.deepEqual(analyzeDynamicImport({ statement: ["import", "(", "variable", ")"] }), null);
+
+    const { dynamics } = tokenizeImports(testString);
+    const dynamicsAnalysis = dynamics.map(dynamicImport => analyzeDynamicImport(dynamicImport))
+
+    assert.deepEqual(dynamicsAnalysis, [{
+      module: "./myOtherModule",
+      line: 26
+    }, {
+      module: "a-module",
+      line: 28
+    }]);
+
+    assert.equal(reconstructDynamicImport(dynamicsAnalysis.at(0), "fixModuleImportPath"), "import(fixModuleImportPath(\"./myOtherModule\"))");
+  })
 
   it('Should convert import statements to async imports', function() {
     const { statements } = tokenizeImports(testString);
